@@ -18,15 +18,52 @@ import (
 	"github.com/openai/openai-go/option"
 	"github.com/openai/openai-go/packages/param"
 	"github.com/openai/openai-go/responses"
+	"github.com/slack-go/slack"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// seedTestMessages posts messages to the given Slack channel and returns a cleanup
+// function that deletes them. The bot token must have channels:history and
+// chat:write (or chat:write.public) scopes.
+func seedTestMessages(t *testing.T, channelID string, messages []string) func() {
+	t.Helper()
+	token := os.Getenv("SLACK_MCP_XOXP_TOKEN")
+	if token == "" {
+		t.Skip("SLACK_MCP_XOXP_TOKEN not set; skipping integration test")
+	}
+	api := slack.New(token)
+	ctx := context.Background()
+
+	var timestamps []string
+	for _, msg := range messages {
+		_, ts, err := api.PostMessageContext(ctx, channelID, slack.MsgOptionText(msg, false))
+		if err != nil {
+			t.Fatalf("seedTestMessages: failed to post %q to %s: %v", msg, channelID, err)
+		}
+		timestamps = append(timestamps, ts)
+	}
+
+	return func() {
+		for _, ts := range timestamps {
+			if _, _, err := api.DeleteMessage(channelID, ts); err != nil {
+				t.Logf("seedTestMessages cleanup: failed to delete message %s from %s: %v", ts, channelID, err)
+			}
+		}
+	}
+}
 
 func TestIntegrationConversations(t *testing.T) {
 	sseKey := uuid.New().String()
 	require.NotEmpty(t, sseKey, "sseKey must be generated for integration tests")
 	apiKey := os.Getenv("SLACK_MCP_OPENAI_API")
 	require.NotEmpty(t, apiKey, "SLACK_MCP_OPENAI_API must be set for integration tests")
+
+	// Seed the test channel with known messages so the test is self-contained.
+	// Channel C097AQFD9LG is #testcase-1 in the korotovsky-io workspace.
+	const testcase1ChannelID = "C097AQFD9LG"
+	cleanup := seedTestMessages(t, testcase1ChannelID, []string{"message 1", "message 2", "message 3"})
+	defer cleanup()
 
 	cfg := util.MCPConfig{
 		SSEKey:             sseKey,
