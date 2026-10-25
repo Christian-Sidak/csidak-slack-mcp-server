@@ -1882,7 +1882,12 @@ func (ch *ConversationsHandler) parseParamsToolSearch(req mcp.CallToolRequest) (
 		}
 		addFilter(filters, "in", f)
 	} else if im := req.GetString("filter_in_im_or_mpim", ""); im != "" {
-		f, err := ch.paramFormatUser(im)
+		resolved, err := resolveIMChannelID(strings.TrimSpace(im), ch.apiProvider.ProvideChannelsMaps())
+		if err != nil {
+			ch.logger.Error("Invalid IM/MPIM filter", zap.String("filter", im), zap.Error(err))
+			return nil, err
+		}
+		f, err := ch.paramFormatUser(resolved)
 		if err != nil {
 			ch.logger.Error("Invalid IM/MPIM filter", zap.String("filter", im), zap.Error(err))
 			return nil, err
@@ -1963,6 +1968,23 @@ func (ch *ConversationsHandler) parseParamsToolSearch(req mcp.CallToolRequest) (
 // Slack user IDs may begin with U or W: https://docs.slack.dev/changelog/2016/08/11/user-id-format-changes
 func isSlackUserIDPrefix(s string) bool {
 	return strings.HasPrefix(s, "U") || strings.HasPrefix(s, "W")
+}
+
+// resolveIMChannelID maps a DM channel ID (D…) to the other participant's user ID
+// using the channels cache. Values that do not start with "D" are returned unchanged
+// so the result can be passed directly to paramFormatUser.
+func resolveIMChannelID(raw string, cms *provider.ChannelsCache) (string, error) {
+	if !strings.HasPrefix(raw, "D") {
+		return raw, nil
+	}
+	chn, ok := cms.Channels[raw]
+	if !ok {
+		return "", fmt.Errorf("IM channel %q not found", raw)
+	}
+	if chn.User == "" {
+		return "", fmt.Errorf("IM channel %q has no associated user", raw)
+	}
+	return chn.User, nil
 }
 
 func (ch *ConversationsHandler) paramFormatUser(raw string) (string, error) {

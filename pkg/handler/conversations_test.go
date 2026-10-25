@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/korotovsky/slack-mcp-server/pkg/provider"
 	"github.com/korotovsky/slack-mcp-server/pkg/test/util"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -649,6 +650,47 @@ func TestUnitIsSlackUserIDPrefix(t *testing.T) {
 			got := isSlackUserIDPrefix(tt.s)
 			if got != tt.want {
 				t.Errorf("isSlackUserIDPrefix(%q) = %v, want %v", tt.s, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUnitResolveIMChannelID(t *testing.T) {
+	cms := &provider.ChannelsCache{
+		Channels: map[string]provider.Channel{
+			"D0XXXXXXXXX": {ID: "D0XXXXXXXXX", IsIM: true, User: "U0AABBCCDD"},
+			"D1NOUSERFLD": {ID: "D1NOUSERFLD", IsIM: true, User: ""},
+		},
+	}
+
+	tests := []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{"user ID passthrough", "U0123ABCD", "U0123ABCD", false},
+		{"username passthrough", "@alice", "@alice", false},
+		{"mention passthrough", "<@U0123ABCD>", "<@U0123ABCD>", false},
+		{"D channel resolved to user ID", "D0XXXXXXXXX", "U0AABBCCDD", false},
+		{"D channel not in cache", "D9XXXXXXXX", "", true},
+		{"D channel with no user field", "D1NOUSERFLD", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveIMChannelID(tt.raw, cms)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("resolveIMChannelID(%q) expected error, got nil", tt.raw)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("resolveIMChannelID(%q) unexpected error: %v", tt.raw, err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("resolveIMChannelID(%q) = %q, want %q", tt.raw, got, tt.want)
 			}
 		})
 	}

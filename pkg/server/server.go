@@ -247,7 +247,7 @@ func NewMCPServer(provider *provider.ApiProvider, logger *zap.Logger, enabledToo
 			mcp.Description("Filter messages in a specific public/private channel by its ID or name. Example: 'C1234567890', 'G1234567890', or '#general'. If not provided, all channels will be searched."),
 		),
 		mcp.WithString("filter_in_im_or_mpim",
-			mcp.Description("Filter messages in a direct message (DM) or multi-person direct message (MPIM) conversation by its ID or name. Example: 'D1234567890' or '@username_dm'. If not provided, all DMs and MPIMs will be searched."),
+			mcp.Description("Filter messages in a direct message (DM) conversation by the IM channel ID, the other participant's user ID, or their username. Example: 'D1234567890', 'U1234567890', or '@username'. For group DMs (MPIM), use filter_in_channel with the channel ID instead. If not provided, all DMs will be searched."),
 		),
 		mcp.WithString("filter_users_with",
 			mcp.Description("Filter messages with a specific user by their ID or display name in threads and DMs. Example: 'U1234567890' or '@username'. If not provided, all threads and DMs will be searched."),
